@@ -1,0 +1,44 @@
+{
+  "name": "spush",
+  "version": "0.1.0",
+  "description": "Publish static web projects over FTP, FTPS, or SFTP from an npm CLI.",
+  "type": "module",
+  "bin": {
+    "spush": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": ["ftp", "ftps", "sftp", "deploy", "publish", "static-site"],
+  "license": "MIT",
+  "dependencies": {
+    "@inquirer/prompts": "^7.3.2",
+    "basic-ftp": "^5.0.5",
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7",
+    "picocolors": "^1.1.1",
+    "ssh2-sftp-client": "^11.0.0",
+    "tinyglobby": "^0.2.10",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/node": "^22.10.7",
+    "@vitest/coverage-v8": "^2.1.8",
+    "tsup": "^8.3.6",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

@@ -1,0 +1,13 @@
+source: .
+include: ["index.html"]
+exclude: [".DS_Store", ".spush/**"]
+
+connection:
+  protocol: ftp
+  host: ftp.example.com
+  port: 21
+  user: your-user
+  password: { env: SPUSH_PASSWORD }
+
+remote_dir: /public_html
+url: https://example.com/

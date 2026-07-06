@@ -1,15 +1,15 @@
 # spush — 実装計画 (plan.md)
 
 > AI が生成した静的 Web プロジェクトを、その場から FTP / FTPS / SFTP で公開する CLI。
-> `npx spush push` で完結する UX を最優先にする。
+> `spush push` で完結する UX を最優先にする。
 
 ## 0. idea.md からの変更点(要件見直し)
 
-idea.md の方針(TypeScript / ESM / npx 配布 / runtime schema validation / protocol transport 抽象)は妥当なので踏襲する。そのうえで以下を判断・変更した。
+idea.md の方針(TypeScript / ESM / npm CLI 配布 / runtime schema validation / protocol transport 抽象)は妥当なので踏襲する。そのうえで以下を判断・変更した。
 
 | 項目 | idea.md | 本計画 | 理由 |
 |---|---|---|---|
-| パッケージ名 | `rentpush` | **`spush`** | ディレクトリ名と一致。短く npx 向き(npm 上の空き確認は公開前タスク) |
+| パッケージ名 | `rentpush` | **`@shuent/spush`** | npm の `spush` は既に使用されているため scoped package にする。bin name は `spush` を維持する |
 | コマンド | `init` / `push` | `init` / `push` / **`check`** を追加 | AI エージェントが「設定が正しいか・接続できるか」をデプロイ前に検証できる。config validation + 接続テストのみで転送しない |
 | 差分アップロード | 言及なし | **リモートマニフェスト方式で MVP から入れる** | 毎回全転送は共有レンタルサーバーの FTP では遅すぎて実用にならない。`.spush/manifest.json` をリモートに置き、ローカルの hash と比較して差分のみ転送 |
 | remote delete | interface から外す案 | **`--delete` フラグで opt-in、デフォルト無効** | マニフェストがあれば「前回 push したが今回消えたファイル」を安全に特定できる。マニフェスト外のファイルには絶対に触れない(既存サイト破壊防止) |
@@ -38,15 +38,15 @@ idea.md の方針(TypeScript / ESM / npx 配布 / runtime schema validation / pr
 ## 2. CLI 仕様
 
 ```bash
-npx spush init                      # 対話形式で spush.yaml 生成
-npx spush init --provider sakura    # preset から生成
-npx spush check                     # 設定検証 + 接続テスト(転送なし)
-npx spush push --dry-run            # 転送計画の表示のみ
-npx spush push                      # 差分アップロード
-npx spush push --delete             # 消えたファイルをリモートからも削除
-npx spush push --verify             # config の url に HTTP 200 smoke check
-npx spush push --verify <url>       # 指定 URL に HTTP 200 smoke check
-npx spush push --json               # 機械可読出力(AI エージェント向け)
+spush init                      # 対話形式で spush.yaml 生成
+spush init --provider sakura    # preset から生成
+spush check                     # 設定検証 + 接続テスト(転送なし)
+spush push --dry-run            # 転送計画の表示のみ
+spush push                      # 差分アップロード
+spush push --delete             # 消えたファイルをリモートからも削除
+spush push --verify             # config の url に HTTP 200 smoke check
+spush push --verify <url>       # 指定 URL に HTTP 200 smoke check
+spush push --json               # 機械可読出力(AI エージェント向け)
 ```
 
 共通オプション: `--config <path>`(default: `spush.yaml`)、`--env-file <path>`、`--json`、`--verbose`
@@ -179,7 +179,7 @@ runtime: Node >= 24 / ESM / `"bin": { "spush": "./dist/cli.js" }` / postinstall 
 
 - `mise.toml` は `node = "24"` に固定する。npm package の `engines.node` は `>=24`。
 - package manager は npm を第一候補にする。`package-lock.json` を commit し、`npm ci` を CI の標準にする。
-- npm package 名 `spush` の空き確認は足場作成前に行う。取れない場合は scoped package に寄せるが、bin name はできる限り `spush` を維持する。
+- npm package 名は `@shuent/spush` とし、bin name は `spush` を維持する。
 - CI は最小で `npm ci` / `npm run build` / `npm test` / `npm run lint` を走らせる。
 - publish 前に `files`、`bin`、`exports`、`engines`、license、README、npm provenance を確認する。
 - install script は置かない。package install 時に network access や binary download をしない。

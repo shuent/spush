@@ -74,24 +74,46 @@ export class FtpTransport implements PublishTransport {
   }
 
   async ensureDir(remotePath: string): Promise<void> {
+    let previousDirectory: string | null = null;
+
     try {
+      previousDirectory = await this.client.pwd();
       await this.client.ensureDir(remotePath);
     } catch (error) {
       throw transferError(`Ensure directory failed: ${remotePath}`, error);
+    } finally {
+      if (previousDirectory) {
+        await this.restoreDirectory(previousDirectory);
+      }
     }
   }
 
   async directoryExists(remotePath: string): Promise<boolean> {
+    let previousDirectory: string | null = null;
+
     try {
+      previousDirectory = await this.client.pwd();
       await this.client.cd(remotePath);
       return true;
     } catch {
       return false;
+    } finally {
+      if (previousDirectory) {
+        await this.restoreDirectory(previousDirectory);
+      }
     }
   }
 
   async close(): Promise<void> {
     this.client.close();
+  }
+
+  private async restoreDirectory(remotePath: string): Promise<void> {
+    try {
+      await this.client.cd(remotePath);
+    } catch {
+      // Avoid masking the operation result with a secondary cwd cleanup failure.
+    }
   }
 }
 

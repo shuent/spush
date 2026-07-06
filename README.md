@@ -235,5 +235,9 @@ spush push --dry-run --json
 npm install
 npm run build
 npm test
+npm run test:integration
 npm run lint
 ```
+
+`npm run test:integration` starts local FTP/SFTP Docker services and exercises the
+real transports. The default `npm test` suite does not require Docker.

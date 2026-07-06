@@ -1,0 +1,22 @@
+services:
+  sftp:
+    image: atmoz/sftp:alpine
+    ports:
+      - "2222:22"
+    command: "spush:password:1001:1001:upload"
+
+  ftp:
+    image: delfer/alpine-ftp-server:latest
+    ports:
+      - "2121:21"
+      - "21100-21110:21100-21110"
+    environment:
+      USERS: "spush|password"
+      ADDRESS: localhost
+      MIN_PORT: 21100
+      MAX_PORT: 21110
+    volumes:
+      - ftp-data:/ftp
+
+volumes:
+  ftp-data:

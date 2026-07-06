@@ -16,7 +16,7 @@
   "scripts": {
     "build": "tsup",
     "test": "vitest run --coverage",
-    "test:integration": "vitest run -c vitest.integration.config.ts",
+    "test:integration": "npm run build && vitest run -c vitest.integration.config.ts",
     "test:watch": "vitest",
     "lint": "biome check .",
     "format": "biome format --write ."

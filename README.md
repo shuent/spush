@@ -239,5 +239,6 @@ npm run test:integration
 npm run lint
 ```
 
-`npm run test:integration` starts local FTP/SFTP Docker services and exercises the
-real transports. The default `npm test` suite does not require Docker.
+`npm run test:integration` builds the CLI, starts local FTP/SFTP Docker services,
+and exercises the real transports through `node dist/cli.js`. The default
+`npm test` suite does not require Docker.

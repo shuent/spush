@@ -4,7 +4,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   type IntegrationTarget,
   createProject,
-  ensureRemoteDir,
   integrationTargets,
   runCheckJson,
   runPushJson,
@@ -29,7 +28,7 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
     const project = await createProject(target, {
       "index.html": "<h1>Hello</h1>",
     });
-    await ensureRemoteDir(project.configPath);
+    await runPushJson(project.configPath);
 
     const result = await runCheckJson(project.configPath);
 

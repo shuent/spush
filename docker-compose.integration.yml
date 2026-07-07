@@ -5,7 +5,22 @@ services:
       - "2222:22"
     command: "spush:password:1001:1001:upload"
     volumes:
+      - sftp-data:/home/spush/upload
       - ./tests/integration/fixtures/sftp_keys:/home/spush/.ssh/keys:ro
+
+  sftp-web:
+    image: php:8.3-apache
+    ports:
+      - "8081:80"
+    volumes:
+      - sftp-data:/var/www/html:ro
+    depends_on:
+      - sftp
+    healthcheck:
+      test: ["CMD-SHELL", "php -v >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
   ftp:
     image: delfer/alpine-ftp-server:latest
@@ -20,5 +35,20 @@ services:
     volumes:
       - ftp-data:/ftp
 
+  ftp-web:
+    image: php:8.3-apache
+    ports:
+      - "8082:80"
+    volumes:
+      - ftp-data:/var/www/html:ro
+    depends_on:
+      - ftp
+    healthcheck:
+      test: ["CMD-SHELL", "php -v >/dev/null"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
+  sftp-data:
   ftp-data:

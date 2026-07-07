@@ -231,6 +231,8 @@ spush import --write-manifest --json
 - サーバー側の変更を正にする場合: `spush import --force --write-manifest` で再取り込みし、必要ならGitで差分を確認する
 - ローカル側の変更を正にする場合: `spush push --force` でmanifest一致ファイルも含めて再アップロードする
 
+Docker integration testでは、PHP/WordPressファイルの転送結果だけでなく、PHP-Apache上でHTTPレスポンスとして実行されることも検証しています。WordPressは軽量な `wp-load.php` 経路でテーマ/プラグインPHPが読み込まれるところまで確認します。
+
 WordPressの投稿、固定ページ、ユーザー、メニュー、管理画面で保存した設定、プラグイン設定などはMySQL / MariaDB上のデータベースに保存されます。`spush` はFTP / FTPS / SFTPで見えるファイルを転送するツールなので、WordPressサイト全体のバックアップ/復元には使いません。DBを含むバックアップ/復元には、WordPressの標準機能、バックアッププラグイン、またはレンタルサーバーのバックアップ機能を使ってください。
 
 詳しい手順は [docs/php-wordpress-guide.md](docs/php-wordpress-guide.md) にあります。
@@ -376,5 +378,7 @@ npm run lint
 ```
 
 `npm run test:integration` builds the CLI, starts local FTP/SFTP Docker services,
-and exercises the real transports through `node dist/cli.js`. The default
-`npm test` suite does not require Docker.
+starts PHP-Apache runtime containers for the uploaded files, and exercises the
+real transports through `node dist/cli.js`. The PHP/WordPress cases assert HTTP
+responses, not only file movement. The default `npm test` suite does not require
+Docker.

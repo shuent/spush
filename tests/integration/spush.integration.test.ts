@@ -5,6 +5,7 @@ import {
   type IntegrationTarget,
   createImportProject,
   createProject,
+  fetchRuntimeText,
   integrationTargets,
   runCheckJson,
   runImportJson,
@@ -136,13 +137,14 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
     });
   });
 
-  it("imports a PHP site, writes a baseline manifest, then pushes only local changes", async () => {
+  it("imports a PHP site, writes a baseline manifest, then pushes local PHP and verifies runtime over HTTP", async () => {
     const seed = await createProject(target, {
-      "index.php": "<?php echo 'home';",
-      "contact.php": "<?php echo 'contact';",
+      "index.php": "<?php echo 'home runtime';",
+      "contact.php": "<?php echo 'contact runtime';",
       "assets/main.css": "body { color: #222; }",
     });
     await runPushJson(seed.configPath);
+    await expect(fetchRuntimeText(target, seed.remoteDir)).resolves.toBe("home runtime");
 
     const imported = await createImportProject(target, seed.remoteDir, {
       source: "site",
@@ -174,9 +176,12 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
     });
 
     await expect(fs.readFile(path.join(imported.sourceDir, "index.php"), "utf8")).resolves.toBe(
-      "<?php echo 'home';",
+      "<?php echo 'home runtime';",
     );
-    await fs.writeFile(path.join(imported.sourceDir, "contact.php"), "<?php echo 'changed';");
+    await fs.writeFile(
+      path.join(imported.sourceDir, "contact.php"),
+      "<?php echo 'changed runtime';",
+    );
 
     const pushed = await runPushJson(imported.configPath);
     expect(pushed).toMatchObject({
@@ -187,6 +192,9 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
       deleted: 0,
       remoteDir: seed.remoteDir,
     });
+    await expect(fetchRuntimeText(target, seed.remoteDir, "contact.php")).resolves.toBe(
+      "changed runtime",
+    );
   });
 
   it("imports a WordPress tree without cache and baselines the imported files", async () => {
@@ -233,11 +241,12 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
     });
   });
 
-  it("force-pushes local WordPress PHP after remote admin-side edits drift from manifest", async () => {
-    const seed = await createProject(target, {
-      "wp-content/themes/acme/functions.php": "<?php echo 'local theme';",
-    });
+  it("force-pushes local WordPress PHP after remote admin-side edits and verifies wp-load runtime", async () => {
+    const seed = await createProject(target, createWordPressRuntimeFiles("local theme"));
     await runPushJson(seed.configPath);
+    await expect(fetchRuntimeText(target, seed.remoteDir)).resolves.toBe(
+      "wp-runtime=local theme|local plugin",
+    );
 
     const imported = await createImportProject(target, seed.remoteDir, {
       source: "wordpress",
@@ -248,7 +257,7 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
     const adminEdit = await createProject(
       target,
       {
-        "wp-content/themes/acme/functions.php": "<?php echo 'edited in wp admin';",
+        "wp-content/themes/acme/functions.php": wordpressThemeRuntimeFile("edited in wp admin"),
       },
       {
         remoteDir: seed.remoteDir,
@@ -256,26 +265,35 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
       },
     );
     await runPushJson(adminEdit.configPath);
+    await expect(fetchRuntimeText(target, seed.remoteDir)).resolves.toBe(
+      "wp-runtime=edited in wp admin|local plugin",
+    );
 
     const normalPush = await runPushJson(imported.configPath);
     expect(normalPush).toMatchObject({
       ok: true,
       command: "push",
       uploaded: 0,
-      skipped: 1,
+      skipped: 4,
       deleted: 0,
       remoteDir: seed.remoteDir,
     });
+    await expect(fetchRuntimeText(target, seed.remoteDir)).resolves.toBe(
+      "wp-runtime=edited in wp admin|local plugin",
+    );
 
     const forcedPush = await runPushJson(imported.configPath, { force: true });
     expect(forcedPush).toMatchObject({
       ok: true,
       command: "push",
-      uploaded: 1,
+      uploaded: 4,
       skipped: 0,
       deleted: 0,
       remoteDir: seed.remoteDir,
     });
+    await expect(fetchRuntimeText(target, seed.remoteDir)).resolves.toBe(
+      "wp-runtime=local theme|local plugin",
+    );
 
     const verifier = await createImportProject(target, seed.remoteDir, {
       source: "verify",
@@ -284,6 +302,34 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
     await runImportJson(verifier.configPath);
     await expect(
       fs.readFile(path.join(verifier.sourceDir, "wp-content/themes/acme/functions.php"), "utf8"),
-    ).resolves.toBe("<?php echo 'local theme';");
+    ).resolves.toBe(wordpressThemeRuntimeFile("local theme"));
   });
 });
+
+function createWordPressRuntimeFiles(themeValue: string): Record<string, string> {
+  return {
+    "index.php": `<?php
+require __DIR__ . '/wp-load.php';
+header('Content-Type: text/plain');
+echo 'wp-runtime=' . acme_theme_runtime() . '|' . acme_plugin_runtime();
+`,
+    "wp-load.php": `<?php
+require_once __DIR__ . '/wp-content/plugins/acme/acme.php';
+require_once __DIR__ . '/wp-content/themes/acme/functions.php';
+`,
+    "wp-content/plugins/acme/acme.php": `<?php
+function acme_plugin_runtime(): string {
+  return 'local plugin';
+}
+`,
+    "wp-content/themes/acme/functions.php": wordpressThemeRuntimeFile(themeValue),
+  };
+}
+
+function wordpressThemeRuntimeFile(value: string): string {
+  return `<?php
+function acme_theme_runtime(): string {
+  return '${value}';
+}
+`;
+}

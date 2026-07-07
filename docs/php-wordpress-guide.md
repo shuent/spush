@@ -4,6 +4,12 @@
 It does not create databases, edit hosting control panels, or back up WordPress
 content stored in MySQL / MariaDB.
 
+The Docker integration suite checks more than file movement for these templates:
+PHP files are requested through PHP-Apache over HTTP, and the WordPress drift case
+loads theme/plugin PHP through a lightweight `wp-load.php` runtime path. That
+keeps the test practical without pretending to be a full WordPress database
+install.
+
 ## Plain PHP site
 
 Use the PHP template when the project root is the publishable site.

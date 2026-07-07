@@ -21,6 +21,10 @@ export type IntegrationTarget = {
   port: number;
   remoteBase: string;
   auth: "password" | "privateKey";
+  runtime: {
+    baseUrl: string;
+    remoteRoot: string;
+  };
 };
 
 export const integrationTargets: IntegrationTarget[] = [
@@ -30,6 +34,10 @@ export const integrationTargets: IntegrationTarget[] = [
     port: 2222,
     remoteBase: "/upload",
     auth: "password",
+    runtime: {
+      baseUrl: "http://127.0.0.1:8081",
+      remoteRoot: "/upload",
+    },
   },
   {
     name: "SFTP private key",
@@ -37,6 +45,10 @@ export const integrationTargets: IntegrationTarget[] = [
     port: 2222,
     remoteBase: "/upload",
     auth: "privateKey",
+    runtime: {
+      baseUrl: "http://127.0.0.1:8081",
+      remoteRoot: "/upload",
+    },
   },
   {
     name: "FTP",
@@ -44,6 +56,10 @@ export const integrationTargets: IntegrationTarget[] = [
     port: 2121,
     remoteBase: "/ftp/spush/upload",
     auth: "password",
+    runtime: {
+      baseUrl: "http://127.0.0.1:8082",
+      remoteRoot: "/ftp",
+    },
   },
 ];
 
@@ -226,6 +242,36 @@ export async function runImportJson(
   return runCliJson(args);
 }
 
+export function runtimeUrlFor(
+  target: IntegrationTarget,
+  remoteDir: string,
+  relativePath = "",
+): string {
+  const runtimeDir = stripRemoteRoot(remoteDir, target.runtime.remoteRoot);
+  const urlPath = [runtimeDir, relativePath]
+    .flatMap((part) => part.split("/"))
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join("/");
+
+  return `${target.runtime.baseUrl}/${urlPath}`;
+}
+
+export async function fetchRuntimeText(
+  target: IntegrationTarget,
+  remoteDir: string,
+  relativePath = "index.php",
+): Promise<string> {
+  const url = runtimeUrlFor(target, remoteDir, relativePath);
+  const response = await fetch(url);
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`Runtime request failed for ${url}: HTTP ${response.status}\n${text}`);
+  }
+
+  return text;
+}
+
 async function runCliJson<T>(args: string[]): Promise<T> {
   try {
     const { stdout, stderr } = await execFileAsync(process.execPath, [cliPath, ...args], {
@@ -298,4 +344,17 @@ function isExecError(error: unknown): error is Error & { stdout: string; stderr:
     "stderr" in error &&
     typeof error.stderr === "string"
   );
+}
+
+function stripRemoteRoot(remoteDir: string, remoteRoot: string): string {
+  if (remoteDir === remoteRoot) {
+    return "";
+  }
+
+  const prefix = remoteRoot.endsWith("/") ? remoteRoot : `${remoteRoot}/`;
+  if (!remoteDir.startsWith(prefix)) {
+    throw new Error(`Remote dir ${remoteDir} is not under runtime root ${remoteRoot}`);
+  }
+
+  return remoteDir.slice(prefix.length);
 }

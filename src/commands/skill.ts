@@ -9,12 +9,15 @@ FTPS, or SFTP using the project's spush.yaml.
 1. Inspect the project and identify the source directory: dist, build, out,
    public, the project root for plain PHP/static sites, or a WordPress folder.
 2. If spush.yaml is missing, create it with \`spush init\` or write the minimal
-   config. Keep passwords and private keys in env vars or files, not inline.
-3. Validate configuration and credentials with \`spush check --env-file .env\`
-   when an env file is used.
+   config. \`spush init\` also writes \`.env.spush.example\`; copy it to
+   \`.env.spush\` and fill it. Prefer \`FTP_HOST\`/\`FTP_USER\`/\`FTP_PASSWORD\`
+   for FTP or FTPS, and \`SFTP_HOST\`/\`SFTP_USER\`/\`SFTP_PASSWORD\` for SFTP.
+   Keep passwords and private keys in env vars or files, not inline.
+3. Validate configuration and credentials with \`spush check --env-file .env.spush\`
+   when using the generated env example.
 4. Before a real upload, run \`spush push --dry-run --json\` and inspect
    uploaded, skipped, deleted, bytes, remoteDir, and warnings.
-5. Run \`spush push --env-file .env --verify --json\` only when the user has
+5. Run \`spush push --env-file .env.spush --verify --json\` only when the user has
    asked to publish, or deployment is clearly part of the requested task.
 
 For an existing remote PHP or WordPress site, prefer \`spush import --dry-run
@@ -29,11 +32,11 @@ remote or local copy wins before pushing.
 
 - \`spush init [--provider sakura|xserver|lolipop] [--template static|php|wordpress|wordpress-import] [--force]\`
   creates spush.yaml.
-- \`spush check [--env-file .env] [--json]\`
+- \`spush check [--env-file .env.spush] [--json]\`
   validates config and tests the remote directory.
-- \`spush push [--dry-run] [--delete] [--force] [--verify [url]] [--env-file .env] [--json]\`
+- \`spush push [--dry-run] [--delete] [--force] [--verify [url]] [--env-file .env.spush] [--json]\`
   uploads changed files and optionally verifies the public URL.
-- \`spush import [--dry-run] [--force] [--write-manifest] [--env-file .env] [--json]\`
+- \`spush import [--dry-run] [--force] [--write-manifest] [--env-file .env.spush] [--json]\`
   downloads remote files into source. Without \`--force\`, existing local files
   stop the import. With \`--write-manifest\`, spush writes the imported baseline
   to the remote manifest used by future pushes.
@@ -48,8 +51,10 @@ Prefer \`--json\` in automation. Successful JSON includes \`ok: true\`,
 includes \`ok: false\`, \`code\`, \`message\`, and \`issues\`.
 
 If a command fails, read \`issues[].message\` for the next action. Common fixes:
-create or adjust spush.yaml, pass \`--env-file .env\`, set the missing secret
-environment variable, or check that \`remote_dir\` exists.
+create or adjust spush.yaml, pass \`--env-file .env.spush\`, set the missing
+environment variable, or check that \`remote_dir\` exists. \`remote_dir: /\`
+is valid when the login directory is the publish root; \`/.\` normalizes to
+\`/\`, and \`..\` traversal segments are rejected.
 
 ## Safety
 

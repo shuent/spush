@@ -5,6 +5,7 @@ import { config as loadDotenv } from "dotenv";
 import { parse } from "yaml";
 import { type ErrorIssue, SpushError } from "../errors.js";
 import {
+  type ConnectionStringConfig,
   type NormalizedConfig,
   type RawConfig,
   type RawConnectionConfig,
@@ -72,6 +73,7 @@ function normalizeConfig(rawConfig: RawConfig, configPath: string, cwd: string):
   const remoteDir = normalizeRemotePath(rawConfig.remote_dir, "remote_dir");
   const manifestPath = normalizeRemotePath(rawConfig.manifest.path, "manifest.path", {
     allowRelative: true,
+    allowRoot: false,
   });
 
   return {
@@ -94,9 +96,9 @@ function resolveConnection(
   if (connection.protocol === "ftp") {
     return {
       protocol: "ftp",
-      host: connection.host,
+      host: resolveConnectionString(connection.host, "connection.host"),
       port: connection.port,
-      user: connection.user,
+      user: resolveConnectionString(connection.user, "connection.user"),
       password: resolveSecret(connection.password, "connection.password"),
     };
   }
@@ -104,9 +106,9 @@ function resolveConnection(
   if (connection.protocol === "ftps") {
     return {
       protocol: "ftps",
-      host: connection.host,
+      host: resolveConnectionString(connection.host, "connection.host"),
       port: connection.port,
-      user: connection.user,
+      user: resolveConnectionString(connection.user, "connection.user"),
       password: resolveSecret(connection.password, "connection.password"),
       rejectUnauthorized: connection.reject_unauthorized,
     };
@@ -114,9 +116,9 @@ function resolveConnection(
 
   return {
     protocol: "sftp",
-    host: connection.host,
+    host: resolveConnectionString(connection.host, "connection.host"),
     port: connection.port,
-    user: connection.user,
+    user: resolveConnectionString(connection.user, "connection.user"),
     password: connection.password
       ? resolveSecret(connection.password, "connection.password")
       : undefined,
@@ -124,6 +126,14 @@ function resolveConnection(
       ? resolveLocalPath(baseDir, connection.private_key.path)
       : undefined,
   };
+}
+
+function resolveConnectionString(value: ConnectionStringConfig, issuePath: string): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return resolveEnv(value.env, issuePath, { secret: false, allowEmpty: false });
 }
 
 function resolveSecret(secret: SecretConfig, issuePath: string): string {
@@ -135,12 +145,30 @@ function resolveSecret(secret: SecretConfig, issuePath: string): string {
     return secret.value;
   }
 
-  const value = process.env[secret.env];
+  return resolveEnv(secret.env, issuePath, { secret: true, allowEmpty: true });
+}
+
+function resolveEnv(
+  envName: string,
+  issuePath: string,
+  options: { secret: boolean; allowEmpty: boolean },
+): string {
+  const value = process.env[envName];
   if (value === undefined) {
     const issues: ErrorIssue[] = [
-      { path: issuePath, message: `Environment variable ${secret.env} is not set` },
+      { path: issuePath, message: `Environment variable ${envName} is not set` },
     ];
-    throw new SpushError("SECRET_ENV_MISSING", `Missing secret: ${secret.env}`, issues);
+    if (options.secret) {
+      throw new SpushError("SECRET_ENV_MISSING", `Missing secret: ${envName}`, issues);
+    }
+
+    throw new SpushError("CONFIG_INVALID", `Missing environment variable: ${envName}`, issues);
+  }
+
+  if (!options.allowEmpty && value.length === 0) {
+    throw new SpushError("CONFIG_INVALID", `Empty environment variable: ${envName}`, [
+      { path: issuePath, message: `Environment variable ${envName} must not be empty` },
+    ]);
   }
 
   return value;
@@ -149,32 +177,45 @@ function resolveSecret(secret: SecretConfig, issuePath: string): string {
 export function normalizeRemotePath(
   remotePath: string,
   issuePath = "remote_path",
-  options: { allowRelative?: boolean } = {},
+  options: { allowRelative?: boolean; allowRoot?: boolean } = {},
 ): string {
   const normalized = remotePath.replaceAll("\\", "/").replace(/\/+/g, "/");
-  const withoutTrailingSlash = normalized.length > 1 ? normalized.replace(/\/$/, "") : normalized;
+  const isAbsolute = normalized.startsWith("/");
+  const segments: string[] = [];
 
-  if (!withoutTrailingSlash || withoutTrailingSlash === ".") {
+  for (const segment of normalized.split("/")) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      throwRemotePathError(issuePath, "Remote path must not contain .. segments");
+    }
+
+    segments.push(segment);
+  }
+
+  if (segments.length === 0) {
+    if (isAbsolute) {
+      if (options.allowRoot === false) {
+        throwRemotePathError(issuePath, "Remote path must not target root");
+      }
+
+      return "/";
+    }
+
     if (options.allowRelative) {
       return ".";
     }
-    throw new SpushError("CONFIG_INVALID", "Remote path is invalid", [
-      { path: issuePath, message: "Remote path must not be empty" },
-    ]);
+
+    throwRemotePathError(issuePath, "Remote path must not be empty");
   }
 
-  if (
-    withoutTrailingSlash === "/" ||
-    withoutTrailingSlash.includes("/../") ||
-    withoutTrailingSlash.startsWith("../") ||
-    withoutTrailingSlash.endsWith("/..")
-  ) {
-    throw new SpushError("CONFIG_INVALID", "Remote path is invalid", [
-      { path: issuePath, message: "Remote path must not target root or contain .. segments" },
-    ]);
-  }
+  return `${isAbsolute ? "/" : ""}${segments.join("/")}`;
+}
 
-  return withoutTrailingSlash;
+function throwRemotePathError(issuePath: string, message: string): never {
+  throw new SpushError("CONFIG_INVALID", "Remote path is invalid", [{ path: issuePath, message }]);
 }
 
 function getErrorMessage(error: unknown): string {

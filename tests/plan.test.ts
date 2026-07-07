@@ -20,6 +20,17 @@ describe("createDeployPlan", () => {
     expect(plan.bytes).toBe(30);
   });
 
+  it("uploads files directly under root when remoteDir is root", () => {
+    const plan = createDeployPlan({
+      localFiles: [file("index.html", "a", 10), file("assets/app.js", "b", 20)],
+      manifest: null,
+      remoteDir: "/",
+      deleteMissing: false,
+    });
+
+    expect(plan.uploads.map((item) => item.remotePath)).toEqual(["/index.html", "/assets/app.js"]);
+  });
+
   it("skips matching hashes and uploads changed files", () => {
     const plan = createDeployPlan({
       localFiles: [file("index.html", "new", 10), file("same.css", "same", 5)],
@@ -80,6 +91,23 @@ describe("createDeployPlan", () => {
 describe("joinRemotePath", () => {
   it("preserves absolute remote roots", () => {
     expect(joinRemotePath("/home/user/www", "assets/app.js")).toBe("/home/user/www/assets/app.js");
+  });
+
+  it("joins against root", () => {
+    expect(joinRemotePath("/", "assets/app.js")).toBe("/assets/app.js");
+  });
+
+  it("normalizes dot segments", () => {
+    expect(joinRemotePath("/.", "assets/./app.js")).toBe("/assets/app.js");
+  });
+
+  it("rejects parent segments before they can escape the base path", () => {
+    expect(() => joinRemotePath("/home/user/www", "../secret.txt")).toThrow(
+      "Remote path is invalid",
+    );
+    expect(() => joinRemotePath("/home/user/www", "assets/../../secret.txt")).toThrow(
+      "Remote path is invalid",
+    );
   });
 });
 

@@ -7,29 +7,37 @@ import { createReporter } from "../output/reporter.js";
 
 type Provider = "sakura" | "xserver" | "lolipop";
 type Template = "static" | "php" | "wordpress" | "wordpress-import";
-
-const providers: Record<Provider, { hostHint: string; remoteDirHint: string; protocol: string }> = {
-  sakura: {
-    hostHint: "example.sakura.ne.jp",
-    remoteDirHint: "/home/account/www",
-    protocol: "sftp",
-  },
-  xserver: {
-    hostHint: "sv0000.xserver.jp",
-    remoteDirHint: "/home/account/example.com/public_html",
-    protocol: "sftp",
-  },
-  lolipop: {
-    hostHint: "ftp.lolipop.jp",
-    remoteDirHint: "web",
-    protocol: "ftp",
-  },
+type Protocol = "ftp" | "ftps" | "sftp";
+type InitArtifacts = {
+  config: string;
+  envExample: string;
 };
+
+const envExampleFileName = ".env.spush.example";
+
+const providers: Record<Provider, { hostHint: string; remoteDirHint: string; protocol: Protocol }> =
+  {
+    sakura: {
+      hostHint: "example.sakura.ne.jp",
+      remoteDirHint: "/home/account/www",
+      protocol: "sftp",
+    },
+    xserver: {
+      hostHint: "sv0000.xserver.jp",
+      remoteDirHint: "/home/account/example.com/public_html",
+      protocol: "sftp",
+    },
+    lolipop: {
+      hostHint: "ftp.lolipop.jp",
+      remoteDirHint: "web",
+      protocol: "ftp",
+    },
+  };
 
 const templates: Record<Template, { source: string; exclude: string[] }> = {
   static: {
     source: "dist",
-    exclude: [".DS_Store", ".spush/**"],
+    exclude: [".DS_Store", ".spush/**", "spush.yaml", "spush.yml", ".env", ".env.*"],
   },
   php: {
     source: ".",
@@ -51,6 +59,10 @@ const templates: Record<Template, { source: string; exclude: string[] }> = {
       ".spush/**",
       ".git/**",
       "node_modules/**",
+      "spush.yaml",
+      "spush.yml",
+      ".env",
+      ".env.*",
       "vendor/**",
       "wp-content/cache/**",
     ],
@@ -90,12 +102,13 @@ export async function runInit(options: InitOptions): Promise<void> {
       ]);
     }
 
-    const config =
+    const artifacts =
       options.provider || options.template || options.preset
-        ? configFromPreset(options)
-        : await promptForConfig();
+        ? artifactsFromPreset(options)
+        : await promptForArtifacts();
 
-    await fs.writeFile(configPath, config, "utf8");
+    await fs.writeFile(configPath, artifacts.config, "utf8");
+    await writeEnvExample(configPath, artifacts.envExample, Boolean(options.force));
     reporter.success({ ok: true, command: "init", durationMs: 0 });
   } catch (error) {
     const spushError = toSpushError(error);
@@ -104,7 +117,7 @@ export async function runInit(options: InitOptions): Promise<void> {
   }
 }
 
-async function promptForConfig(): Promise<string> {
+async function promptForArtifacts(): Promise<InitArtifacts> {
   const protocol = await select({
     message: "Protocol",
     choices: [
@@ -116,13 +129,17 @@ async function promptForConfig(): Promise<string> {
   const source = await input({ message: "Source directory", default: "dist" });
   const host = await input({ message: "Host" });
   const user = await input({ message: "User" });
-  const passwordEnv = await input({ message: "Password env var", default: "SPUSH_PASSWORD" });
+  const envNames = envNamesForProtocol(protocol);
+  const passwordEnv = await input({
+    message: "Password env var",
+    default: envNames.passwordEnv,
+  });
   const remoteDir = await input({ message: "Remote directory" });
   const url = await input({ message: "Public URL (optional)" });
 
-  return renderConfig({
+  return renderArtifacts({
     source,
-    protocol,
+    protocol: protocol as Protocol,
     host,
     user,
     passwordEnv,
@@ -131,19 +148,20 @@ async function promptForConfig(): Promise<string> {
   });
 }
 
-function configFromPreset(options: InitOptions): string {
+function artifactsFromPreset(options: InitOptions): InitArtifacts {
   const provider = resolveProvider(options.provider);
   const template = resolveTemplate(options.template, options.preset);
   const preset = provider ? providers[provider] : genericPresetFor(template);
   const templateConfig = templates[template];
+  const envNames = envNamesForProtocol(preset.protocol);
 
-  return renderConfig({
+  return renderArtifacts({
     source: templateConfig.source,
     exclude: templateConfig.exclude,
     protocol: preset.protocol,
     host: preset.hostHint,
     user: "your-user",
-    passwordEnv: "SPUSH_PASSWORD",
+    passwordEnv: envNames.passwordEnv,
     remoteDir: remoteDirForTemplate(preset.remoteDirHint, template),
     url: "https://example.com/",
   });
@@ -188,7 +206,7 @@ function resolveTemplate(template: string | undefined, preset: string | undefine
 function genericPresetFor(template: Template): {
   hostHint: string;
   remoteDirHint: string;
-  protocol: string;
+  protocol: Protocol;
 } {
   return {
     hostHint: "example.com",
@@ -208,12 +226,41 @@ function remoteDirForTemplate(remoteDirHint: string, template: Template): string
   return posixPath.join(remoteDirHint, "wp");
 }
 
+function renderArtifacts(options: {
+  source: string;
+  exclude?: string[];
+  protocol: Protocol;
+  host: string;
+  user: string;
+  passwordEnv: string;
+  remoteDir: string;
+  url?: string;
+}): InitArtifacts {
+  const envNames = envNamesForProtocol(options.protocol);
+
+  return {
+    config: renderConfig({
+      ...options,
+      hostEnv: envNames.hostEnv,
+      userEnv: envNames.userEnv,
+    }),
+    envExample: renderEnvExample({
+      protocol: options.protocol,
+      host: options.host,
+      user: options.user,
+      hostEnv: envNames.hostEnv,
+      userEnv: envNames.userEnv,
+      passwordEnv: options.passwordEnv,
+    }),
+  };
+}
+
 function renderConfig(options: {
   source: string;
   exclude?: string[];
-  protocol: string;
-  host: string;
-  user: string;
+  protocol: Protocol;
+  hostEnv: string;
+  userEnv: string;
   passwordEnv: string;
   remoteDir: string;
   url?: string;
@@ -226,14 +273,55 @@ exclude: [${exclude.map((item) => JSON.stringify(item)).join(", ")}]
 
 connection:
   protocol: ${options.protocol}
-  host: ${options.host}
+  host: { env: ${options.hostEnv} }
   port: ${port}
-  user: ${options.user}
+  user: { env: ${options.userEnv} }
   password: { env: ${options.passwordEnv} }
 
 remote_dir: ${options.remoteDir}
-${options.url ? `url: ${options.url}\n` : ""}# env_file: .env
+${options.url ? `url: ${options.url}\n` : ""}# env_file: .env.spush
 `;
+}
+
+function renderEnvExample(options: {
+  protocol: Protocol;
+  host: string;
+  user: string;
+  hostEnv: string;
+  userEnv: string;
+  passwordEnv: string;
+}): string {
+  const label = options.protocol === "sftp" ? "SFTP" : "FTP/FTPS";
+  return `# Copy this file to .env.spush and fill in the values.
+# Then run spush with --env-file .env.spush or uncomment env_file in spush.yaml.
+
+# ${label} connection
+${options.hostEnv}=${options.host}
+${options.userEnv}=${options.user}
+${options.passwordEnv}=
+`;
+}
+
+function envNamesForProtocol(protocol: Protocol): {
+  hostEnv: string;
+  userEnv: string;
+  passwordEnv: string;
+} {
+  const prefix = protocol === "sftp" ? "SFTP" : "FTP";
+  return {
+    hostEnv: `${prefix}_HOST`,
+    userEnv: `${prefix}_USER`,
+    passwordEnv: `${prefix}_PASSWORD`,
+  };
+}
+
+async function writeEnvExample(configPath: string, content: string, force: boolean): Promise<void> {
+  const envExamplePath = path.join(path.dirname(configPath), envExampleFileName);
+  if (!force && (await exists(envExamplePath))) {
+    return;
+  }
+
+  await fs.writeFile(envExamplePath, content, "utf8");
 }
 
 async function exists(filePath: string): Promise<boolean> {

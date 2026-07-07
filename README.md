@@ -231,8 +231,6 @@ spush import --write-manifest --json
 - サーバー側の変更を正にする場合: `spush import --force --write-manifest` で再取り込みし、必要ならGitで差分を確認する
 - ローカル側の変更を正にする場合: `spush push --force` でmanifest一致ファイルも含めて再アップロードする
 
-Docker integration testでは、PHP/WordPressファイルの転送結果だけでなく、PHP-Apache上でHTTPレスポンスとして実行されることも検証しています。WordPressは軽量な `wp-load.php` 経路でテーマ/プラグインPHPが読み込まれるところまで確認します。
-
 WordPressの投稿、固定ページ、ユーザー、メニュー、管理画面で保存した設定、プラグイン設定などはMySQL / MariaDB上のデータベースに保存されます。`spush` はFTP / FTPS / SFTPで見えるファイルを転送するツールなので、WordPressサイト全体のバックアップ/復元には使いません。DBを含むバックアップ/復元には、WordPressの標準機能、バックアッププラグイン、またはレンタルサーバーのバックアップ機能を使ってください。
 
 詳しい手順は [docs/php-wordpress-guide.md](docs/php-wordpress-guide.md) にあります。

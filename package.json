@@ -1,6 +1,6 @@
 {
   "name": "@shuent/spush",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Publish static web projects over FTP, FTPS, or SFTP from an npm CLI.",
   "type": "module",
   "bin": {

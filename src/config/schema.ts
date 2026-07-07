@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const envSecretSchema = z
+const envReferenceSchema = z
   .object({
     env: z.string().min(1),
   })
@@ -12,7 +12,8 @@ const literalSecretSchema = z
   })
   .strict();
 
-export const secretSchema = z.union([envSecretSchema, literalSecretSchema, z.string()]);
+export const secretSchema = z.union([envReferenceSchema, literalSecretSchema, z.string()]);
+export const connectionStringSchema = z.union([envReferenceSchema, z.string().min(1)]);
 
 const privateKeySchema = z
   .object({
@@ -21,8 +22,8 @@ const privateKeySchema = z
   .strict();
 
 const baseConnectionSchema = {
-  host: z.string().min(1),
-  user: z.string().min(1),
+  host: connectionStringSchema,
+  user: connectionStringSchema,
 };
 
 export const connectionSchema = z.discriminatedUnion("protocol", [
@@ -86,6 +87,7 @@ export const rawConfigSchema = z
   });
 
 export type SecretConfig = z.infer<typeof secretSchema>;
+export type ConnectionStringConfig = z.infer<typeof connectionStringSchema>;
 export type RawConnectionConfig = z.infer<typeof connectionSchema>;
 export type RawConfig = z.infer<typeof rawConfigSchema>;
 

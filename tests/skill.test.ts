@@ -7,6 +7,10 @@ describe("runSkill", () => {
 
     expect(output).toBe(`${skillGuide.trimEnd()}\n`);
     expect(output).toContain("spush push --dry-run --json");
+    expect(output).toContain(".env.spush.example");
+    expect(output).toContain("FTP_HOST");
+    expect(output).toContain("SFTP_HOST");
+    expect(output).toContain("remote_dir: /");
     expect(output).toContain("Do not hard-code secrets");
   });
 });

@@ -1,0 +1,13 @@
+source: .
+include: ["index.html", "styles.css", "script.js"]
+exclude: [".DS_Store", ".env", ".gitignore", ".spush/**", "spush.yaml"]
+
+connection:
+  protocol: ftp
+  host: sv15.static.ne.jp
+  user: st106096
+  password: { env: FTP_PASSWORD }
+
+remote_dir: /.
+url: https://sv15.static.ne.jp/
+env_file: .env

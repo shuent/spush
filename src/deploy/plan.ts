@@ -50,10 +50,22 @@ export function createDeployPlan(options: CreateDeployPlanOptions): DeployPlan {
 }
 
 export function joinRemotePath(...parts: string[]): string {
-  const joined = path.join(...parts.filter(Boolean));
+  const nonEmptyParts = parts.filter(Boolean);
+  for (const part of nonEmptyParts) {
+    rejectParentSegments(part);
+  }
+
+  const joined = path.join(...nonEmptyParts);
   if (parts[0]?.startsWith("/") && !joined.startsWith("/")) {
     return normalizeRemotePath(`/${joined}`);
   }
 
   return normalizeRemotePath(joined);
+}
+
+function rejectParentSegments(remotePath: string): void {
+  const normalized = remotePath.replaceAll("\\", "/").replace(/\/+/g, "/");
+  if (normalized.split("/").some((segment) => segment === "..")) {
+    normalizeRemotePath(remotePath);
+  }
 }

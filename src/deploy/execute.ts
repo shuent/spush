@@ -11,7 +11,7 @@ export async function executeDeployPlan(
 
   for (const upload of plan.uploads) {
     const directory = path.dirname(upload.remotePath);
-    if (!ensuredDirectories.has(directory)) {
+    if (shouldEnsureDirectory(directory) && !ensuredDirectories.has(directory)) {
       await transport.ensureDir(directory);
       ensuredDirectories.add(directory);
     }
@@ -30,6 +30,13 @@ export async function uploadManifest(
   content: string,
 ): Promise<void> {
   const remotePath = joinRemotePath(remoteDir, manifestPath);
-  await transport.ensureDir(path.dirname(remotePath));
+  const directory = path.dirname(remotePath);
+  if (shouldEnsureDirectory(directory)) {
+    await transport.ensureDir(directory);
+  }
   await transport.uploadFromString(remotePath, content);
+}
+
+function shouldEnsureDirectory(remotePath: string): boolean {
+  return remotePath !== "/" && remotePath !== ".";
 }

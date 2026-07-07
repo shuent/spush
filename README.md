@@ -1,30 +1,32 @@
 # spush
 
-`spush` is an npm CLI for publishing static web projects directly from a project directory to FTP, FTPS, or SFTP hosting.
+`spush` is an npm CLI for publishing file-based web projects directly from a project directory to FTP, FTPS, or SFTP hosting.
 
-For AI-generated HTML/CSS/JS, locally built SPAs, and simple static sites on traditional hosting, `spush push` handles the last step: putting finished files on the server.
+For AI-generated HTML/CSS/JS, locally built SPAs, simple PHP sites, and WordPress files on traditional hosting, `spush push` handles the last step: putting finished files on the server.
 
-`spush` は、静的なWebプロジェクトを **FTP / FTPS / SFTP のレンタルサーバーへ、そのプロジェクトディレクトリからそのまま公開する** ための npm CLI です。
+`spush` は、ファイルとして配置できるWebプロジェクトを **FTP / FTPS / SFTP のレンタルサーバーへ、そのプロジェクトディレクトリからそのまま公開する** ための npm CLI です。
 
-AIが生成したHTML/CSS/JS、手元でビルドしたSPA、昔ながらのレンタルサーバーで動かす静的サイト。そういう「もうファイルはできている。あとはサーバーに置きたい」を、`spush push` で短く終わらせます。
+AIが生成したHTML/CSS/JS、手元でビルドしたSPA、昔ながらのレンタルサーバーで動かす静的サイトやPHPサイト、WordPressのテーマ・プラグイン・本体ファイル。そういう「もうファイルはできている。あとはサーバーに置きたい」を、`spush push` で短く終わらせます。
 
 ```bash
 npm install -g @shuent/spush
-spush init
-spush skill
-spush check --env-file .env
-spush push --dry-run
-spush push --env-file .env --verify
+
+spush skill # AI read cli guide
+spush init # create config yaml
+spush push # upload artifacts
 ```
 
 ## 使う場所
 
-`spush` が向いているのは、アプリケーションサーバーを立てるほどではないけれど、FTP / FTPS / SFTP で公開できる場所にWeb成果物を置きたいときです。
+`spush` が向いているのは、アプリケーションサーバーを立てるほどではないけれど、FTP / FTPS / SFTP で公開できる場所にWebプロジェクトのファイルを置きたいときです。
 
 - `index.html` と `assets/` だけの静的サイト
 - Vite / React / Vue / Svelte などを `npm run build` したあとの `dist/`
 - Astro / Next.js static export / Storybook など、最終的に静的ファイルになる出力先
 - LP、キャンペーンページ、ドキュメント、プロトタイプ、社内ツールのフロントだけ
+- PHPファイルをそのまま置いて動かす小規模サイト
+- WordPressテーマや自作プラグインをGit管理して反映したいサイト
+- WordPress本体ファイルを手動インストール用にアップロードしたいサイト
 - さくらのレンタルサーバー、Xserver、ロリポップ、一般的なFTP対応ホスティング
 - 人間がローカルから手元のサイトを公開する日常的なCLI操作
 - AI coding agent が生成・修正したWebプロジェクトを、そのまま公開まで進めるワークフロー
@@ -33,6 +35,16 @@ spush push --env-file .env --verify
 FTP / FTPS / SFTP の接続情報さえあれば、ホスティングごとの管理画面に依存せず、どんなレンタルサーバーでも同じコマンドで人間の作業、AIのワークフロー、CI/CDに組み込めます。
 
 たとえばAIにサイトを作らせた直後のディレクトリで、
+
+```text
+project/
+  index.php
+  contact.php
+  assets/
+  spush.yaml
+```
+
+または、
 
 ```text
 project/
@@ -48,6 +60,18 @@ project/
   src/
   dist/
   package.json
+  spush.yaml
+```
+
+または、
+
+```text
+project/
+  wordpress/
+    wp-admin/
+    wp-content/
+    wp-includes/
+    index.php
   spush.yaml
 ```
 
@@ -135,9 +159,35 @@ url: https://example.com/
 # env_file: .env
 ```
 
-`source` にはアップロードしたいディレクトリを指定します。静的サイトなら `.`、Viteなどのビルド成果物なら `dist`、static export なら `out` のように、実際に公開したいファイルが入っている場所を指定してください。
+`source` にはアップロードしたいディレクトリを指定します。静的サイトやPHPサイトなら `.`、Viteなどのビルド成果物なら `dist`、static export なら `out`、WordPress本体を手動インストールするなら `wordpress`、テーマだけを反映するなら `wp-content/themes/my-theme` のように、実際に公開したいファイルが入っている場所を指定してください。
 
 `connection.protocol` は `ftp`、`ftps`、`sftp` に対応しています。`remote_dir` はサーバー上の公開先ディレクトリです。
+
+### WordPressで使う
+
+`spush` はWordPress専用ツールではありませんが、WordPressのファイルも通常のPHPファイルとしてアップロードできます。
+
+たとえば、レンタルサーバーの管理画面でMySQLデータベースとユーザーを作成したあと、WordPress本体ファイルを `spush push` で公開ディレクトリへ置けば、ブラウザからWordPressのインストールウィザードを進められます。
+
+テーマや自作プラグインだけをGit管理して反映する用途にも使えます。
+
+```yaml
+source: wp-content/themes/my-theme
+include: ["**/*"]
+exclude: [".DS_Store", ".spush/**", ".git/**", "node_modules/**"]
+
+connection:
+  protocol: sftp
+  host: example.com
+  port: 22
+  user: myuser
+  password: { env: SPUSH_PASSWORD }
+
+remote_dir: /home/myuser/example.com/public_html/wp-content/themes/my-theme
+url: https://example.com/
+```
+
+WordPressの投稿、固定ページ、ユーザー、メニュー、管理画面で保存した設定、プラグイン設定などはMySQL / MariaDB上のデータベースに保存されます。`spush` はFTP / FTPS / SFTPで見えるファイルを転送するツールなので、WordPressサイト全体のバックアップ/復元には使いません。DBを含むバックアップ/復元には、WordPressの標準機能、バックアッププラグイン、またはレンタルサーバーのバックアップ機能を使ってください。
 
 ## 秘密情報
 
@@ -229,11 +279,13 @@ spush push --dry-run --json
 
 ## できること / しないこと
 
-`spush` は「静的ファイルを安全に置く」ことに集中しています。
+`spush` は「FTP / FTPS / SFTPで見えるWebプロジェクトのファイルを、安全に置く」ことに集中しています。
 
 できること:
 
-- ローカルの静的ファイルをFTP / FTPS / SFTPへアップロードする
+- ローカルの静的ファイル、PHPファイル、ビルド済み成果物をFTP / FTPS / SFTPへアップロードする
+- WordPressテーマや自作プラグインをGit管理してアップロードする
+- WordPress本体ファイルを手動インストール用にアップロードする
 - 前回から変わったファイルだけを転送する
 - 明示した場合だけ、追跡済みの削除差分を反映する
 - 公開URLの簡単な疎通確認をする
@@ -243,9 +295,12 @@ spush push --dry-run --json
 
 しないこと:
 
+- WordPressサイト全体のバックアップ/復元
+- MySQL / MariaDBなどのデータベースのバックアップ/復元
+- WordPressの投稿、固定ページ、ユーザー、メニュー、管理画面設定の同期
 - SSRアプリや常駐サーバーのデプロイ
 - Docker / systemd / process manager の操作
-- DNS、SSL証明書、データベースの管理
+- DNS、SSL証明書、データベースの作成や管理
 - ホスティング管理画面の自動操作
 
 ## 開発

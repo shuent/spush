@@ -1,10 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import posixPath from "node:path/posix";
 import { input, select } from "@inquirer/prompts";
 import { SpushError, toSpushError } from "../errors.js";
 import { createReporter } from "../output/reporter.js";
 
 type Provider = "sakura" | "xserver" | "lolipop";
+type Template = "static" | "php" | "wordpress" | "wordpress-import";
 
 const providers: Record<Provider, { hostHint: string; remoteDirHint: string; protocol: string }> = {
   sakura: {
@@ -19,14 +21,60 @@ const providers: Record<Provider, { hostHint: string; remoteDirHint: string; pro
   },
   lolipop: {
     hostHint: "ftp.lolipop.jp",
-    remoteDirHint: "/",
+    remoteDirHint: "web",
     protocol: "ftp",
+  },
+};
+
+const templates: Record<Template, { source: string; exclude: string[] }> = {
+  static: {
+    source: "dist",
+    exclude: [".DS_Store", ".spush/**"],
+  },
+  php: {
+    source: ".",
+    exclude: [
+      ".DS_Store",
+      ".spush/**",
+      ".git/**",
+      "node_modules/**",
+      "spush.yaml",
+      "spush.yml",
+      ".env",
+      ".env.*",
+    ],
+  },
+  wordpress: {
+    source: "wordpress",
+    exclude: [
+      ".DS_Store",
+      ".spush/**",
+      ".git/**",
+      "node_modules/**",
+      "vendor/**",
+      "wp-content/cache/**",
+    ],
+  },
+  "wordpress-import": {
+    source: ".",
+    exclude: [
+      ".DS_Store",
+      ".spush/**",
+      ".git/**",
+      "spush.yaml",
+      "spush.yml",
+      ".env",
+      ".env.*",
+      "wp-content/cache/**",
+    ],
   },
 };
 
 export type InitOptions = {
   config?: string;
-  provider?: Provider;
+  provider?: string;
+  template?: string;
+  preset?: string;
   force?: boolean;
   json?: boolean;
 };
@@ -42,9 +90,10 @@ export async function runInit(options: InitOptions): Promise<void> {
       ]);
     }
 
-    const config = options.provider
-      ? configFromProvider(options.provider)
-      : await promptForConfig();
+    const config =
+      options.provider || options.template || options.preset
+        ? configFromPreset(options)
+        : await promptForConfig();
 
     await fs.writeFile(configPath, config, "utf8");
     reporter.success({ ok: true, command: "init", durationMs: 0 });
@@ -82,21 +131,86 @@ async function promptForConfig(): Promise<string> {
   });
 }
 
-function configFromProvider(provider: Provider): string {
-  const preset = providers[provider];
+function configFromPreset(options: InitOptions): string {
+  const provider = resolveProvider(options.provider);
+  const template = resolveTemplate(options.template, options.preset);
+  const preset = provider ? providers[provider] : genericPresetFor(template);
+  const templateConfig = templates[template];
+
   return renderConfig({
-    source: "dist",
+    source: templateConfig.source,
+    exclude: templateConfig.exclude,
     protocol: preset.protocol,
     host: preset.hostHint,
     user: "your-user",
     passwordEnv: "SPUSH_PASSWORD",
-    remoteDir: preset.remoteDirHint,
+    remoteDir: remoteDirForTemplate(preset.remoteDirHint, template),
     url: "https://example.com/",
   });
 }
 
+function resolveProvider(value: string | undefined): Provider | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (value === "sakura" || value === "xserver" || value === "lolipop") {
+    return value;
+  }
+
+  throw new SpushError("CONFIG_INVALID", `Unknown provider preset: ${value}`, [
+    { path: "provider", message: "Use sakura, xserver, or lolipop" },
+  ]);
+}
+
+function resolveTemplate(template: string | undefined, preset: string | undefined): Template {
+  if (template && preset && template !== preset) {
+    throw new SpushError("CONFIG_INVALID", "Conflicting init templates", [
+      { path: "template", message: "--template and --preset must match when both are set" },
+    ]);
+  }
+
+  const value = template ?? preset ?? "static";
+  if (
+    value === "static" ||
+    value === "php" ||
+    value === "wordpress" ||
+    value === "wordpress-import"
+  ) {
+    return value;
+  }
+
+  throw new SpushError("CONFIG_INVALID", `Unknown template preset: ${value}`, [
+    { path: "template", message: "Use static, php, wordpress, or wordpress-import" },
+  ]);
+}
+
+function genericPresetFor(template: Template): {
+  hostHint: string;
+  remoteDirHint: string;
+  protocol: string;
+} {
+  return {
+    hostHint: "example.com",
+    remoteDirHint:
+      template === "wordpress" || template === "wordpress-import"
+        ? "/home/myuser/example.com/public_html"
+        : "/home/myuser/www",
+    protocol: "sftp",
+  };
+}
+
+function remoteDirForTemplate(remoteDirHint: string, template: Template): string {
+  if (template !== "wordpress") {
+    return remoteDirHint;
+  }
+
+  return posixPath.join(remoteDirHint, "wp");
+}
+
 function renderConfig(options: {
   source: string;
+  exclude?: string[];
   protocol: string;
   host: string;
   user: string;
@@ -105,9 +219,10 @@ function renderConfig(options: {
   url?: string;
 }): string {
   const port = options.protocol === "sftp" ? 22 : 21;
+  const exclude = options.exclude ?? templates.static.exclude;
   return `source: ${options.source}
 include: ["**/*"]
-exclude: [".DS_Store", ".spush/**"]
+exclude: [${exclude.map((item) => JSON.stringify(item)).join(", ")}]
 
 connection:
   protocol: ${options.protocol}

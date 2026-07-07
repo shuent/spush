@@ -1,0 +1,23 @@
+source: .
+include: ["**/*"]
+exclude: [
+  ".DS_Store",
+  ".spush/**",
+  ".git/**",
+  "node_modules/**",
+  "spush.yaml",
+  "spush.yml",
+  ".env",
+  ".env.*",
+]
+
+connection:
+  protocol: sftp
+  host: example.com
+  port: 22
+  user: your-user
+  password: { env: SPUSH_PASSWORD }
+
+remote_dir: /home/myuser/www
+url: https://example.com/
+# env_file: .env

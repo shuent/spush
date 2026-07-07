@@ -14,6 +14,7 @@ npm install -g @shuent/spush
 spush skill # AI read cli guide
 spush init # create config yaml
 spush push # upload artifacts
+spush import --write-manifest # import an existing site and baseline it
 ```
 
 ## 使う場所
@@ -113,6 +114,15 @@ spush init --provider xserver
 spush init --provider lolipop
 ```
 
+PHPサイトやWordPress向けの雛形も選べます。
+
+```bash
+spush init --template php
+spush init --template wordpress
+spush init --template wordpress-import
+spush init --provider xserver --template wordpress
+```
+
 接続情報と公開先ディレクトリを確認します。
 
 ```bash
@@ -129,6 +139,13 @@ spush push --dry-run
 
 ```bash
 spush push --env-file .env --verify
+```
+
+既存サイトをローカルへ取り込む場合は、まず予定を確認してから取得します。あとで同じサイトへ `push` するなら、取得時点をbaselineとしてリモートmanifestへ記録します。
+
+```bash
+spush import --dry-run --json
+spush import --write-manifest --json
 ```
 
 インストールせずに一度だけ実行したい場合は、package名を指定して実行できます。
@@ -163,11 +180,23 @@ url: https://example.com/
 
 `connection.protocol` は `ftp`、`ftps`、`sftp` に対応しています。`remote_dir` はサーバー上の公開先ディレクトリです。
 
-### WordPressで使う
+### PHP / WordPressで使う
 
-`spush` はWordPress専用ツールではありませんが、WordPressのファイルも通常のPHPファイルとしてアップロードできます。
+`spush` はWordPress専用ツールではありません。PHPファイルやWordPressのファイルを、FTP / FTPS / SFTPで見える通常のファイルとして扱います。
+
+小さなPHPサイトなら `source: .` のテンプレートから始められます。
+
+```bash
+spush init --template php
+spush push --dry-run
+```
 
 たとえば、レンタルサーバーの管理画面でMySQLデータベースとユーザーを作成したあと、WordPress本体ファイルを `spush push` で公開ディレクトリへ置けば、ブラウザからWordPressのインストールウィザードを進められます。
+
+```bash
+spush init --template wordpress
+spush push --env-file .env
+```
 
 テーマや自作プラグインだけをGit管理して反映する用途にも使えます。
 
@@ -187,7 +216,24 @@ remote_dir: /home/myuser/example.com/public_html/wp-content/themes/my-theme
 url: https://example.com/
 ```
 
+レンタルサーバーの「簡単WordPressインストール」で先にサイトを作った場合は、既存ファイルをローカルへ取り込めます。
+
+```bash
+spush init --template wordpress-import
+spush import --dry-run --json
+spush import --write-manifest --json
+```
+
+`import --write-manifest` は、取得した時点のファイル一覧とハッシュをリモートの `.spush/manifest.json` へ書きます。これにより、次回の `spush push` は全ファイル再アップロードではなく、ローカルで変更した差分だけを送ります。
+
+注意点として、WordPressは管理画面のテーマ/プラグインエディター、プラグイン更新、テーマ更新などでサーバー上のPHPファイルが変わることがあります。通常の `spush push` はリモートmanifestを信じて差分判断するため、manifest作成後にサーバー側だけで変わったファイルは自動検知しません。
+
+- サーバー側の変更を正にする場合: `spush import --force --write-manifest` で再取り込みし、必要ならGitで差分を確認する
+- ローカル側の変更を正にする場合: `spush push --force` でmanifest一致ファイルも含めて再アップロードする
+
 WordPressの投稿、固定ページ、ユーザー、メニュー、管理画面で保存した設定、プラグイン設定などはMySQL / MariaDB上のデータベースに保存されます。`spush` はFTP / FTPS / SFTPで見えるファイルを転送するツールなので、WordPressサイト全体のバックアップ/復元には使いません。DBを含むバックアップ/復元には、WordPressの標準機能、バックアッププラグイン、またはレンタルサーバーのバックアップ機能を使ってください。
+
+詳しい手順は [docs/php-wordpress-guide.md](docs/php-wordpress-guide.md) にあります。
 
 ## 秘密情報
 
@@ -224,6 +270,9 @@ spush init
 spush init --provider sakura
 spush init --provider xserver
 spush init --provider lolipop
+spush init --template php
+spush init --template wordpress
+spush init --template wordpress-import
 
 spush skill
 
@@ -231,16 +280,28 @@ spush check --env-file .env
 
 spush push --dry-run
 spush push --delete
+spush push --force
 spush push --verify
 spush push --verify https://example.com/
 spush push --json
+
+spush import --dry-run
+spush import --force
+spush import --write-manifest
+spush import --json
 ```
 
 `push --dry-run` は設定を検証し、ローカルファイルをスキャンして、アップロード予定を表示します。リモートサーバーには接続しません。
 
 `push --delete` は、過去に `spush` が管理用マニフェストへ記録したファイルだけを削除対象にします。サーバー上にある未追跡のファイルは削除しません。
 
+`push --force` は、リモートmanifest上では同じハッシュに見えるファイルも含めて、`source` 内の対象ファイルをすべてアップロードします。WordPress管理画面やサーバー側作業でPHPファイルが変わり、ローカルの内容で上書きしたいときに使います。
+
 `push --verify` は、設定の `url` または明示したURLに対して軽量なHTTP 200確認を行います。ページ全体や全アセットの検証ではなく、公開後のスモークチェックです。
+
+`import` は、設定の `remote_dir` 配下を再帰的に読み、`include` / `exclude` に一致するファイルを `source` へ保存します。既存ローカルファイルがある場合はデフォルトで止まり、`--force` のときだけ上書きします。
+
+`import --write-manifest` は、取得後にリモートの `.spush/manifest.json` をbaselineとして書きます。既存サイトを取り込んだ直後に使うと、次回 `push` は差分だけをアップロードできます。
 
 ## skill
 
@@ -286,6 +347,7 @@ spush push --dry-run --json
 - ローカルの静的ファイル、PHPファイル、ビルド済み成果物をFTP / FTPS / SFTPへアップロードする
 - WordPressテーマや自作プラグインをGit管理してアップロードする
 - WordPress本体ファイルを手動インストール用にアップロードする
+- 既存のPHPサイトやWordPressファイルをローカル開発用に取り込む
 - 前回から変わったファイルだけを転送する
 - 明示した場合だけ、追跡済みの削除差分を反映する
 - 公開URLの簡単な疎通確認をする

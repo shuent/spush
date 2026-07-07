@@ -1,9 +1,10 @@
+import path from "node:path/posix";
 import { Writable } from "node:stream";
 import { Readable } from "node:stream";
 import { Client } from "basic-ftp";
 import type { ResolvedConnectionConfig } from "../config/schema.js";
 import { SpushError } from "../errors.js";
-import type { PublishTransport } from "./types.js";
+import type { PublishTransport, RemoteEntry } from "./types.js";
 
 type FtpConnectionConfig = Extract<ResolvedConnectionConfig, { protocol: "ftp" | "ftps" }>;
 
@@ -37,6 +38,22 @@ export class FtpTransport implements PublishTransport {
       await this.client.uploadFrom(localPath, remotePath);
     } catch (error) {
       throw transferError(`Upload failed: ${remotePath}`, error);
+    }
+  }
+
+  async list(remoteDir: string): Promise<RemoteEntry[]> {
+    try {
+      return await this.listDirectory(remoteDir, "");
+    } catch (error) {
+      throw transferError(`List failed: ${remoteDir}`, error);
+    }
+  }
+
+  async download(remotePath: string, localPath: string): Promise<void> {
+    try {
+      await this.client.downloadTo(localPath, remotePath);
+    } catch (error) {
+      throw transferError(`Download failed: ${remotePath}`, error);
     }
   }
 
@@ -114,6 +131,41 @@ export class FtpTransport implements PublishTransport {
     } catch {
       // Avoid masking the operation result with a secondary cwd cleanup failure.
     }
+  }
+
+  private async listDirectory(remoteDir: string, relativeDir: string): Promise<RemoteEntry[]> {
+    const currentRemoteDir = relativeDir ? path.join(remoteDir, relativeDir) : remoteDir;
+    const items = await this.client.list(currentRemoteDir);
+    const entries: RemoteEntry[] = [];
+
+    for (const item of items) {
+      if (item.name === "." || item.name === "..") {
+        continue;
+      }
+
+      const relativePath = relativeDir ? path.join(relativeDir, item.name) : item.name;
+      if (item.isDirectory) {
+        entries.push({
+          path: relativePath,
+          type: "directory",
+          size: item.size,
+          modifiedAt: item.modifiedAt?.toISOString(),
+        });
+        entries.push(...(await this.listDirectory(remoteDir, relativePath)));
+        continue;
+      }
+
+      if (item.isFile) {
+        entries.push({
+          path: relativePath,
+          type: "file",
+          size: item.size,
+          modifiedAt: item.modifiedAt?.toISOString(),
+        });
+      }
+    }
+
+    return entries;
   }
 }
 

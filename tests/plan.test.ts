@@ -35,6 +35,22 @@ describe("createDeployPlan", () => {
     expect(plan.skips.map((item) => item.path)).toEqual(["same.css"]);
   });
 
+  it("uploads all local files when forceUpload is enabled", () => {
+    const plan = createDeployPlan({
+      localFiles: [file("index.html", "same", 10), file("same.css", "same", 5)],
+      manifest: manifest([
+        { path: "index.html", sha256: "same", size: 10 },
+        { path: "same.css", sha256: "same", size: 5 },
+      ]),
+      remoteDir: "/www",
+      deleteMissing: false,
+      forceUpload: true,
+    });
+
+    expect(plan.uploads.map((item) => item.local.path)).toEqual(["index.html", "same.css"]);
+    expect(plan.skips).toEqual([]);
+  });
+
   it("only deletes manifest-tracked missing files when deleteMissing is enabled", () => {
     const previous = manifest([
       { path: "index.html", sha256: "same", size: 10 },

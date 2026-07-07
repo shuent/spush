@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
+import path from "node:path/posix";
 import SftpClient from "ssh2-sftp-client";
 import type { ResolvedConnectionConfig } from "../config/schema.js";
 import { SpushError } from "../errors.js";
-import type { PublishTransport } from "./types.js";
+import type { PublishTransport, RemoteEntry } from "./types.js";
 
 type SftpConnectionConfig = Extract<ResolvedConnectionConfig, { protocol: "sftp" }>;
 
@@ -34,6 +35,22 @@ export class SftpTransport implements PublishTransport {
       await this.client.put(localPath, remotePath);
     } catch (error) {
       throw transferError(`Upload failed: ${remotePath}`, error);
+    }
+  }
+
+  async list(remoteDir: string): Promise<RemoteEntry[]> {
+    try {
+      return await this.listDirectory(remoteDir, "");
+    } catch (error) {
+      throw transferError(`List failed: ${remoteDir}`, error);
+    }
+  }
+
+  async download(remotePath: string, localPath: string): Promise<void> {
+    try {
+      await this.client.get(remotePath, localPath);
+    } catch (error) {
+      throw transferError(`Download failed: ${remotePath}`, error);
     }
   }
 
@@ -82,6 +99,40 @@ export class SftpTransport implements PublishTransport {
   async close(): Promise<void> {
     await this.client.end();
   }
+
+  private async listDirectory(remoteDir: string, relativeDir: string): Promise<RemoteEntry[]> {
+    const currentRemoteDir = relativeDir ? path.join(remoteDir, relativeDir) : remoteDir;
+    const items = await this.client.list(currentRemoteDir);
+    const entries: RemoteEntry[] = [];
+
+    for (const item of items) {
+      if (item.name === "." || item.name === "..") {
+        continue;
+      }
+
+      const relativePath = relativeDir ? path.join(relativeDir, item.name) : item.name;
+      if (item.type === "d") {
+        entries.push({
+          path: relativePath,
+          type: "directory",
+          modifiedAt: toIsoDate(item.modifyTime),
+        });
+        entries.push(...(await this.listDirectory(remoteDir, relativePath)));
+        continue;
+      }
+
+      if (item.type === "-") {
+        entries.push({
+          path: relativePath,
+          type: "file",
+          size: item.size,
+          modifiedAt: toIsoDate(item.modifyTime),
+        });
+      }
+    }
+
+    return entries;
+  }
 }
 
 function transferError(message: string, error: unknown): SpushError {
@@ -92,4 +143,12 @@ function transferError(message: string, error: unknown): SpushError {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function toIsoDate(value: number | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  return new Date(value).toISOString();
 }

@@ -5,6 +5,7 @@ export type CommandSuccess = {
   ok: true;
   command: string;
   uploaded?: number;
+  downloaded?: number;
   skipped?: number;
   deleted?: number;
   bytes?: number;
@@ -15,6 +16,7 @@ export type CommandSuccess = {
     url: string;
     status: number;
   };
+  manifestWritten?: boolean;
   warnings?: string[];
 };
 
@@ -55,6 +57,7 @@ function createHumanReporter(): Reporter {
       const parts = [
         result.dryRun ? pc.yellow("dry-run") : pc.green("ok"),
         result.uploaded !== undefined ? `uploaded ${result.uploaded}` : undefined,
+        result.downloaded !== undefined ? `downloaded ${result.downloaded}` : undefined,
         result.skipped !== undefined ? `skipped ${result.skipped}` : undefined,
         result.deleted !== undefined ? `deleted ${result.deleted}` : undefined,
         result.bytes !== undefined ? `${result.bytes} bytes` : undefined,
@@ -67,6 +70,10 @@ function createHumanReporter(): Reporter {
         process.stdout.write(
           pc.green(`verified ${result.verified.url} (${result.verified.status})\n`),
         );
+      }
+
+      if (result.manifestWritten) {
+        process.stdout.write(pc.green("wrote remote manifest baseline\n"));
       }
 
       for (const warning of result.warnings ?? []) {

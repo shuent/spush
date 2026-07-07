@@ -3,9 +3,11 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   type IntegrationTarget,
+  createImportProject,
   createProject,
   integrationTargets,
   runCheckJson,
+  runImportJson,
   runPushJson,
   startIntegrationServices,
   stopIntegrationServices,
@@ -132,5 +134,156 @@ describe.each(integrationTargets)("$name transport", (target: IntegrationTarget)
       deleted: 0,
       remoteDir: project.remoteDir,
     });
+  });
+
+  it("imports a PHP site, writes a baseline manifest, then pushes only local changes", async () => {
+    const seed = await createProject(target, {
+      "index.php": "<?php echo 'home';",
+      "contact.php": "<?php echo 'contact';",
+      "assets/main.css": "body { color: #222; }",
+    });
+    await runPushJson(seed.configPath);
+
+    const imported = await createImportProject(target, seed.remoteDir, {
+      source: "site",
+      exclude: [".DS_Store", ".spush/**", ".git/**"],
+    });
+
+    const dryRun = await runImportJson(imported.configPath, {
+      dryRun: true,
+      writeManifest: true,
+    });
+    expect(dryRun).toMatchObject({
+      ok: true,
+      command: "import",
+      dryRun: true,
+      downloaded: 3,
+      skipped: 1,
+      manifestWritten: false,
+      remoteDir: seed.remoteDir,
+    });
+
+    const result = await runImportJson(imported.configPath, { writeManifest: true });
+    expect(result).toMatchObject({
+      ok: true,
+      command: "import",
+      downloaded: 3,
+      skipped: 1,
+      manifestWritten: true,
+      remoteDir: seed.remoteDir,
+    });
+
+    await expect(fs.readFile(path.join(imported.sourceDir, "index.php"), "utf8")).resolves.toBe(
+      "<?php echo 'home';",
+    );
+    await fs.writeFile(path.join(imported.sourceDir, "contact.php"), "<?php echo 'changed';");
+
+    const pushed = await runPushJson(imported.configPath);
+    expect(pushed).toMatchObject({
+      ok: true,
+      command: "push",
+      uploaded: 1,
+      skipped: 2,
+      deleted: 0,
+      remoteDir: seed.remoteDir,
+    });
+  });
+
+  it("imports a WordPress tree without cache and baselines the imported files", async () => {
+    const seed = await createProject(target, {
+      "index.php": "<?php require __DIR__ . '/wp-blog-header.php';",
+      "wp-config.php": "<?php define('DB_NAME', 'example');",
+      "wp-content/themes/acme/functions.php": "<?php function acme_theme() {}",
+      "wp-content/plugins/acme/acme.php": "<?php /* Plugin Name: Acme */",
+      "wp-content/uploads/2026/hero.txt": "uploaded media",
+      "wp-content/cache/page-cache.html": "<html>cached</html>",
+    });
+    await runPushJson(seed.configPath);
+
+    const imported = await createImportProject(target, seed.remoteDir, {
+      source: "wordpress",
+      exclude: [".DS_Store", ".spush/**", ".git/**", "wp-content/cache/**"],
+    });
+
+    const result = await runImportJson(imported.configPath, { writeManifest: true });
+    expect(result).toMatchObject({
+      ok: true,
+      command: "import",
+      downloaded: 5,
+      skipped: 2,
+      manifestWritten: true,
+      remoteDir: seed.remoteDir,
+    });
+
+    await expect(
+      fs.readFile(path.join(imported.sourceDir, "wp-content/themes/acme/functions.php"), "utf8"),
+    ).resolves.toContain("acme_theme");
+    await expect(
+      fs.access(path.join(imported.sourceDir, "wp-content/cache/page-cache.html")),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+
+    const pushed = await runPushJson(imported.configPath);
+    expect(pushed).toMatchObject({
+      ok: true,
+      command: "push",
+      uploaded: 0,
+      skipped: 5,
+      deleted: 0,
+      remoteDir: seed.remoteDir,
+    });
+  });
+
+  it("force-pushes local WordPress PHP after remote admin-side edits drift from manifest", async () => {
+    const seed = await createProject(target, {
+      "wp-content/themes/acme/functions.php": "<?php echo 'local theme';",
+    });
+    await runPushJson(seed.configPath);
+
+    const imported = await createImportProject(target, seed.remoteDir, {
+      source: "wordpress",
+      exclude: [".DS_Store", ".spush/**", ".git/**", "wp-content/cache/**"],
+    });
+    await runImportJson(imported.configPath, { writeManifest: true });
+
+    const adminEdit = await createProject(
+      target,
+      {
+        "wp-content/themes/acme/functions.php": "<?php echo 'edited in wp admin';",
+      },
+      {
+        remoteDir: seed.remoteDir,
+        manifestPath: ".spush/admin-editor-manifest.json",
+      },
+    );
+    await runPushJson(adminEdit.configPath);
+
+    const normalPush = await runPushJson(imported.configPath);
+    expect(normalPush).toMatchObject({
+      ok: true,
+      command: "push",
+      uploaded: 0,
+      skipped: 1,
+      deleted: 0,
+      remoteDir: seed.remoteDir,
+    });
+
+    const forcedPush = await runPushJson(imported.configPath, { force: true });
+    expect(forcedPush).toMatchObject({
+      ok: true,
+      command: "push",
+      uploaded: 1,
+      skipped: 0,
+      deleted: 0,
+      remoteDir: seed.remoteDir,
+    });
+
+    const verifier = await createImportProject(target, seed.remoteDir, {
+      source: "verify",
+      exclude: [".DS_Store", ".spush/**"],
+    });
+    await runImportJson(verifier.configPath);
+    await expect(
+      fs.readFile(path.join(verifier.sourceDir, "wp-content/themes/acme/functions.php"), "utf8"),
+    ).resolves.toBe("<?php echo 'local theme';");
   });
 });

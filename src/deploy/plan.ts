@@ -7,6 +7,7 @@ export type CreateDeployPlanOptions = {
   manifest: Manifest | null;
   remoteDir: string;
   deleteMissing: boolean;
+  forceUpload?: boolean;
 };
 
 export function createDeployPlan(options: CreateDeployPlanOptions): DeployPlan {
@@ -18,7 +19,7 @@ export function createDeployPlan(options: CreateDeployPlanOptions): DeployPlan {
 
   for (const file of options.localFiles) {
     const previous = manifestFiles.get(file.path);
-    if (previous?.sha256 === file.sha256) {
+    if (!options.forceUpload && previous?.sha256 === file.sha256) {
       skips.push({ path: file.path, sha256: file.sha256, size: file.size });
       continue;
     }

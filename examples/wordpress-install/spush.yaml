@@ -1,0 +1,21 @@
+source: wordpress
+include: ["**/*"]
+exclude: [
+  ".DS_Store",
+  ".spush/**",
+  ".git/**",
+  "node_modules/**",
+  "vendor/**",
+  "wp-content/cache/**",
+]
+
+connection:
+  protocol: sftp
+  host: sv0000.xserver.jp
+  port: 22
+  user: your-user
+  password: { env: SPUSH_PASSWORD }
+
+remote_dir: /home/your-user/example.com/public_html/wp
+url: https://example.com/wp/
+# env_file: .env

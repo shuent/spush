@@ -92,15 +92,23 @@ export type TestProject = {
   remoteDir: string;
 };
 
+export type ImportProject = {
+  dir: string;
+  sourceDir: string;
+  configPath: string;
+  remoteDir: string;
+};
+
 export async function createProject(
   target: IntegrationTarget,
   files: Record<string, string>,
+  options: { remoteDir?: string; manifestPath?: string } = {},
 ): Promise<TestProject> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "spush-integration-"));
   const distDir = path.join(dir, "dist");
-  const remoteDir = `${target.remoteBase}/site-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
+  const remoteDir =
+    options.remoteDir ??
+    `${target.remoteBase}/site-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   for (const [relativePath, content] of Object.entries(files)) {
     const absolutePath = path.join(distDir, relativePath);
@@ -120,10 +128,39 @@ connection:
   user: spush
 ${connectionSecret(target)}
 remote_dir: ${remoteDir}
+${options.manifestPath ? `manifest:\n  path: ${options.manifestPath}\n` : ""}
 `,
   );
 
   return { dir, distDir, configPath, remoteDir };
+}
+
+export async function createImportProject(
+  target: IntegrationTarget,
+  remoteDir: string,
+  options: { source?: string; exclude?: string[] } = {},
+): Promise<ImportProject> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "spush-import-integration-"));
+  const source = options.source ?? "site";
+  const sourceDir = path.join(dir, source);
+  const configPath = path.join(dir, "spush.yaml");
+  await fs.writeFile(
+    configPath,
+    `
+source: ${source}
+include: ["**/*"]
+exclude: ${JSON.stringify(options.exclude ?? [".DS_Store", ".spush/**"])}
+connection:
+  protocol: ${target.protocol}
+  host: 127.0.0.1
+  port: ${target.port}
+  user: spush
+${connectionSecret(target)}
+remote_dir: ${remoteDir}
+`,
+  );
+
+  return { dir, sourceDir, configPath, remoteDir };
 }
 
 export type CheckJsonResult = {
@@ -141,17 +178,49 @@ export type PushJsonResult = {
   remoteDir: string;
 };
 
+export type ImportJsonResult = {
+  ok: true;
+  command: "import";
+  downloaded: number;
+  skipped: number;
+  bytes: number;
+  remoteDir: string;
+  dryRun?: boolean;
+  manifestWritten?: boolean;
+};
+
 export async function runCheckJson(configPath: string): Promise<CheckJsonResult> {
   return runCliJson(["check", "--config", configPath, "--json"]);
 }
 
 export async function runPushJson(
   configPath: string,
-  options: { delete?: boolean } = {},
+  options: { delete?: boolean; force?: boolean } = {},
 ): Promise<PushJsonResult> {
   const args = ["push", "--config", configPath, "--json"];
   if (options.delete) {
     args.push("--delete");
+  }
+  if (options.force) {
+    args.push("--force");
+  }
+
+  return runCliJson(args);
+}
+
+export async function runImportJson(
+  configPath: string,
+  options: { dryRun?: boolean; force?: boolean; writeManifest?: boolean } = {},
+): Promise<ImportJsonResult> {
+  const args = ["import", "--config", configPath, "--json"];
+  if (options.dryRun) {
+    args.push("--dry-run");
+  }
+  if (options.force) {
+    args.push("--force");
+  }
+  if (options.writeManifest) {
+    args.push("--write-manifest");
   }
 
   return runCliJson(args);

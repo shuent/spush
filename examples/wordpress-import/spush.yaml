@@ -1,0 +1,22 @@
+source: .
+include: ["**/*"]
+exclude:
+  - ".DS_Store"
+  - ".spush/**"
+  - ".git/**"
+  - "spush.yaml"
+  - "spush.yml"
+  - ".env"
+  - ".env.*"
+  - "wp-content/cache/**"
+
+connection:
+  protocol: sftp
+  host: sv0000.xserver.jp
+  port: 22
+  user: your-user
+  password: { env: SPUSH_PASSWORD }
+
+remote_dir: /home/your-user/example.com/public_html
+url: https://example.com/
+# env_file: .env

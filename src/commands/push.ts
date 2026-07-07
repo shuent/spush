@@ -1,9 +1,9 @@
-import path from "node:path/posix";
 import { loadConfig } from "../config/load.js";
 import type { NormalizedConfig } from "../config/schema.js";
 import { executeDeployPlan, uploadManifest } from "../deploy/execute.js";
 import { createManifest, parseManifest, serializeManifest } from "../deploy/manifest.js";
 import { createDeployPlan, joinRemotePath } from "../deploy/plan.js";
+import { ensureConfigIsReserved, ensureManifestIsReserved } from "../deploy/reserved.js";
 import { scanLocalFiles } from "../deploy/scan.js";
 import { verifyUrl } from "../deploy/verify.js";
 import { SpushError, toSpushError } from "../errors.js";
@@ -18,6 +18,7 @@ export type PushOptions = {
   verbose?: boolean;
   dryRun?: boolean;
   delete?: boolean;
+  force?: boolean;
   verify?: boolean | string;
 };
 
@@ -44,6 +45,11 @@ export async function runPush(
       localFiles.map((file) => file.path),
       config.manifestPath,
     );
+    ensureConfigIsReserved(
+      localFiles.map((file) => file.path),
+      config.source,
+      config.configPath,
+    );
 
     const createTransport = dependencies.createTransport ?? defaultCreateTransport;
     const warnings: string[] = [];
@@ -54,6 +60,7 @@ export async function runPush(
         manifest: null,
         remoteDir: config.remoteDir,
         deleteMissing: Boolean(options.delete),
+        forceUpload: Boolean(options.force),
       });
 
       reporter.success({
@@ -90,6 +97,7 @@ export async function runPush(
         manifest,
         remoteDir: config.remoteDir,
         deleteMissing: Boolean(options.delete),
+        forceUpload: Boolean(options.force),
       });
 
       await executeDeployPlan(plan, transport);
@@ -150,16 +158,4 @@ function resolveVerifyTarget(
   }
 
   return configUrl;
-}
-
-function ensureManifestIsReserved(localPaths: string[], manifestPath: string): void {
-  const normalizedManifestPath = manifestPath.replace(/^\.\//, "");
-  if (localPaths.includes(normalizedManifestPath)) {
-    throw new SpushError("CONFIG_INVALID", "Source includes the internal spush manifest path", [
-      {
-        path: "exclude",
-        message: `Exclude ${path.dirname(normalizedManifestPath)}/** from uploads`,
-      },
-    ]);
-  }
 }

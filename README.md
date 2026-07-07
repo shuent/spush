@@ -1,5 +1,9 @@
 # spush
 
+`spush` is an npm CLI for publishing static web projects directly from a project directory to FTP, FTPS, or SFTP hosting.
+
+For AI-generated HTML/CSS/JS, locally built SPAs, and simple static sites on traditional hosting, `spush push` handles the last step: putting finished files on the server.
+
 `spush` は、静的なWebプロジェクトを **FTP / FTPS / SFTP のレンタルサーバーへ、そのプロジェクトディレクトリからそのまま公開する** ための npm CLI です。
 
 AIが生成したHTML/CSS/JS、手元でビルドしたSPA、昔ながらのレンタルサーバーで動かす静的サイト。そういう「もうファイルはできている。あとはサーバーに置きたい」を、`spush push` で短く終わらせます。

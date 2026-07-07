@@ -3,6 +3,7 @@ import { Command } from "commander";
 import { runCheck } from "./commands/check.js";
 import { runInit } from "./commands/init.js";
 import { runPush } from "./commands/push.js";
+import { runSkill } from "./commands/skill.js";
 
 const program = new Command();
 
@@ -10,6 +11,13 @@ program
   .name("spush")
   .description("Publish static web projects over FTP, FTPS, or SFTP.")
   .version("0.1.0");
+
+program
+  .command("skill")
+  .description("Print the AI agent usage guide for spush.")
+  .action(() => {
+    runSkill();
+  });
 
 program
   .command("init")

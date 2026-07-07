@@ -9,7 +9,7 @@
   "exports": {
     ".": "./dist/index.js"
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": ["dist", "README.md", "LICENSE", ".agents/skills/spush/SKILL.md"],
   "publishConfig": {
     "access": "public"
   },
